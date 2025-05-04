@@ -12,7 +12,7 @@ This project fetches real-time flight data using the Aviationstack API, stores i
 - `main.py`: Fetches and stores flight data from the API.
 - `app.py`: Provides an API endpoint to access flights delayed by over 2 hours.
 - `sql.sql`: SQL script to set up the required database schema.
-- `EU Flight Project.pdf`: Documentation and explanation of the project.
+
 
 ## 🚀 Features
 - Automatic detection of flights delayed by more than 2 hours.
