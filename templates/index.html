@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Flight Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <style>
+        .refresh-msg {
+            font-size: 0.9rem;
+            color: gray;
+            text-align: right;
+        }
+    </style>
+</head>
+<body class="bg-light p-4">
+<div class="container">
+    <h2 class="mb-4">✈️ Flight Dashboard</h2>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-3" id="flightTabs">
+        <li class="nav-item">
+            <a class="nav-link active" href="#" onclick="showTab('all')">All Flights</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="#" onclick="showTab('delayed')">Delayed Flights (2+ hours)</a>
+        </li>
+    </ul>
+
+    <!-- Delete Button -->
+    <div class="d-flex justify-content-between mb-3">
+        <button class="btn btn-danger" onclick="deleteFlights()">🗑️ Delete All Flights</button>
+        <div class="refresh-msg" id="lastRefresh">Last refresh: just now</div>
+    </div>
+
+    <!-- 🔍 Search Flight Section -->
+    <div class="card p-3 mb-4">
+        <h5>🔍 Search Flight by Flight Number</h5>
+        <div class="d-flex gap-2">
+            <input type="text" id="searchFlightInput" class="form-control" placeholder="Enter Flight Number">
+            <button class="btn btn-primary" onclick="searchFlight()">Search</button>
+        </div>
+        <div id="searchResult" class="mt-3"></div>
+    </div>
+
+    <!-- All Flights Table -->
+    <div id="all" class="tab-content">
+        <h4>All Flights</h4>
+        <table class="table table-bordered table-striped">
+            <thead><tr><th>Flight Number</th><th>Departure</th><th>Arrival</th></tr></thead>
+            <tbody id="allFlights"><tr><td colspan="3">Loading...</td></tr></tbody>
+        </table>
+    </div>
+
+    <!-- Delayed Flights Table -->
+    <div id="delayed" class="tab-content d-none">
+        <h4>Delayed Flights (2+ hours)</h4>
+        <table class="table table-bordered table-striped">
+            <thead><tr><th>Flight</th><th>Departure</th><th>Scheduled</th><th>Delay</th><th>Copy</th></tr></thead>
+            <tbody id="delayedFlights"><tr><td colspan="5">Loading...</td></tr></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    function showTab(tabId) {
+        document.querySelectorAll('.tab-content').forEach(div => div.classList.add('d-none'));
+        document.getElementById(tabId).classList.remove('d-none');
+        document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+        document.querySelector(`[onclick="showTab('${tabId}')"]`).classList.add('active');
+    }
+
+    function copyText(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            alert("Copied: " + text);
+        });
+    }
+
+    function loadAllFlights() {
+        fetch("/api/flights")
+            .then(res => res.json())
+            .then(data => {
+                const table = document.getElementById("allFlights");
+                table.innerHTML = "";
+                data.forEach(f => {
+                    table.innerHTML += `
+                        <tr>
+                            <td>${f.flight_number}</td>
+                            <td>${f.departure_time}</td>
+                            <td>${f.arrival_time}</td>
+                        </tr>`;
+                });
+            })
+            .catch(() => {
+                document.getElementById("allFlights").innerHTML = "<tr><td colspan='3'>Error loading data</td></tr>";
+            });
+    }
+
+    function loadDelayedFlights() {
+        fetch("/api/flights/delayed")
+            .then(res => res.json())
+            .then(data => {
+                const table = document.getElementById("delayedFlights");
+                table.innerHTML = "";
+
+                if (!data.length || data.message) {
+                    table.innerHTML = `<tr><td colspan="5">No delayed flights</td></tr>`;
+                    return;
+                }
+
+                data.forEach(f => {
+                    table.innerHTML += `
+                        <tr>
+                            <td>${f.flight_number}</td>
+                            <td>${f.departure_time}</td>
+                            <td>${f.scheduled_departure_time}</td>
+                            <td>${f.delay_time}</td>
+                            <td><button class="btn btn-sm btn-success" onclick="copyText('Flight ${f.flight_number} delayed by ${f.delay_time}')">Copy</button></td>
+                        </tr>`;
+                });
+            })
+            .catch(() => {
+                document.getElementById("delayedFlights").innerHTML = "<tr><td colspan='5'>Error loading data</td></tr>";
+            });
+    }
+
+    function deleteFlights() {
+        if (confirm("Are you sure you want to delete ALL flight data?")) {
+            fetch("/api/flights/delete", { method: "DELETE" })
+                .then(res => res.json())
+                .then(data => {
+                    alert(data.message || "Deletion completed");
+                    loadAllFlights();
+                    loadDelayedFlights();
+                })
+                .catch(err => alert("Error: " + err));
+        }
+    }
+
+    function updateRefreshTime() {
+        const now = new Date();
+        document.getElementById("lastRefresh").innerText = `Last refresh: ${now.toLocaleTimeString()}`;
+    }
+
+    function refreshData() {
+        loadAllFlights();
+        loadDelayedFlights();
+        updateRefreshTime();
+        console.log("Data refreshed.");
+    }
+
+    function searchFlight() {
+        const flightNumber = document.getElementById("searchFlightInput").value.trim();
+
+        if (!flightNumber) {
+            alert("Please enter a flight number.");
+            return;
+        }
+
+        fetch(`/api/flights/${flightNumber}`)
+            .then(res => res.json())
+            .then(data => {
+                const resultDiv = document.getElementById("searchResult");
+
+                if (data.message === "Flight not found") {
+                    resultDiv.innerHTML = `<div class="alert alert-warning">Flight not found.</div>`;
+                    return;
+                }
+
+                resultDiv.innerHTML = `
+                    <div class="card p-3">
+                        <h6>Flight: ${data.flight_number}</h6>
+                        <p><strong>Departure Airport ID:</strong> ${data.departure_airport_id}</p>
+                        <p><strong>Arrival Airport ID:</strong> ${data.arrival_airport_id}</p>
+                        <p><strong>Airline ID:</strong> ${data.airline_id}</p>
+                        <p><strong>Departure Time:</strong> ${data.departure_time}</p>
+                        <p><strong>Arrival Time:</strong> ${data.arrival_time}</p>
+                        <p><strong>Scheduled Departure:</strong> ${data.scheduled_departure_time}</p>
+                    </div>
+                `;
+            })
+            .catch(() => {
+                document.getElementById("searchResult").innerHTML = `<div class="alert alert-danger">Error fetching flight details.</div>`;
+            });
+    }
+
+    // Initial load
+    refreshData();
+
+    // Auto refresh every 30 seconds
+    setInterval(refreshData, 30000);
+</script>
+</body>
+</html>
